@@ -1,4 +1,4 @@
-ervices:
+services:
   - type: web
     name: nse-alert-bot
     env: python
@@ -7,7 +7,7 @@ ervices:
     startCommand: "gunicorn main:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120"
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11.9
+        value: 3.12.7
       - key: DRY_RUN
         value: "false"
       - key: ANGEL_API_KEY
