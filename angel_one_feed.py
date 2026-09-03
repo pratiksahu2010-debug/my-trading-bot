@@ -155,8 +155,15 @@ class AngelOneFeed:
         [timestamp, open, high, low, close, volume], sorted ascending.
         Empty DataFrame on any failure (caller must handle -> ErrorLog + skip).
         """
-        if config.DRY_RUN or not self._logged_in:
+        if config.DRY_RUN:
             return self._mock_candles(symbol)
+
+        if not self._logged_in:
+            # Do NOT silently fall back to fake data when real login failed -
+            # that would hide a broken deployment behind plausible-looking
+            # mock alerts. Fail loudly instead so it shows up in ErrorLog.
+            log.error(f"[ANGEL] Not logged in - cannot fetch real candles for {symbol}")
+            return pd.DataFrame()
 
         token = self.token_for(symbol)
         if not token:
