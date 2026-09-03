@@ -248,11 +248,89 @@ def health():
 
 @app.route("/trigger/<bot_id>")
 def manual_trigger(bot_id):
-    """Manual test endpoint, e.g. /trigger/BOT1 - runs one scan immediately."""
+    """
+    Manual test endpoint, e.g. /trigger/BOT1 - runs one scan immediately.
+    Add ?force=true to bypass the market-hours check (e.g. /trigger/BOT1?force=true)
+    so you can test outside 9:15-15:30 IST without waiting.
+    """
+    from flask import request
     if bot_id not in config.BOTS:
         return jsonify({"error": "unknown bot_id"}), 404
-    check_all_symbols(bot_id)
-    return jsonify({"status": "scan triggered", "bot_id": bot_id})
+    force = request.args.get("force", "false").lower() == "true"
+    if force:
+        log.info(f"[{bot_id}] Manual trigger with force=true, ignoring market hours")
+        rt = _bot_runtime[bot_id]
+        symbols = [r["symbol"] for r in rt["storage"].get_active_symbols()]
+        for sym in symbols:
+            process_symbol(bot_id, sym)
+    else:
+        check_all_symbols(bot_id)
+    return jsonify({"status": "scan triggered", "bot_id": bot_id, "forced": force})
+
+
+@app.route("/status/<bot_id>")
+def bot_status(bot_id):
+    """
+    Diagnostic endpoint - answers "why am I not getting alerts?" without
+    digging through Render logs. Hit e.g. /status/BOT1
+    """
+    if bot_id not in config.BOTS:
+        return jsonify({"error": "unknown bot_id"}), 404
+
+    bot_cfg = config.BOTS[bot_id]
+    storage = _bot_runtime[bot_id]["storage"]
+    token_set = bool(_env(bot_cfg["token_env"]))
+    chat_id_set = bool(_env(bot_cfg["chat_id_env"]))
+
+    active_rows = storage.get_active_symbols()
+    broken = [r["symbol"] for r in active_rows if r["status"] == "BROKEN"]
+    total_errors, error_breakdown = storage.errors_today_summary()
+
+    with storage._conn() as conn:
+        recent_errors = [
+            dict(r) for r in conn.execute(
+                "SELECT * FROM error_log ORDER BY id DESC LIMIT 10"
+            ).fetchall()
+        ]
+
+    return jsonify({
+        "bot_id": bot_id,
+        "bot_name": bot_cfg["name"],
+        "is_market_hours_now": _is_market_hours(),
+        "dry_run": config.DRY_RUN,
+        "angel_logged_in": feed._logged_in,
+        "angel_instrument_tokens_resolved": len(feed.instrument_map),
+        "telegram_token_configured": token_set,
+        "telegram_chat_id_configured": chat_id_set,
+        "active_symbols": len(active_rows),
+        "broken_symbols": broken,
+        "alerts_sent_today": storage.count_alerts_today(),
+        "errors_today_total": total_errors,
+        "errors_today_by_type": error_breakdown,
+        "most_recent_errors": recent_errors,
+    })
+
+
+@app.route("/telegram_test/<bot_id>")
+def telegram_test(bot_id):
+    """
+    Sends a plain test message to confirm the Telegram token/chat_id for
+    this bot are wired correctly - independent of scoring/market data.
+    Hit e.g. /telegram_test/BOT1 and check the chat.
+    """
+    if bot_id not in config.BOTS:
+        return jsonify({"error": "unknown bot_id"}), 404
+    bot_cfg = config.BOTS[bot_id]
+    token, chat_id = _env(bot_cfg["token_env"]), _env(bot_cfg["chat_id_env"])
+    if not token or not chat_id:
+        return jsonify({
+            "sent": False,
+            "reason": "token or chat_id env var not set on Render",
+            "token_env_name": bot_cfg["token_env"],
+            "chat_id_env_name": bot_cfg["chat_id_env"],
+        }), 400
+    msg_id = telegram_notify._send(token, chat_id, f"✅ Test message from {bot_cfg['name']}")
+    return jsonify({"sent": bool(msg_id), "message_id": msg_id})
 
 
 if __name__ == "__main__":
