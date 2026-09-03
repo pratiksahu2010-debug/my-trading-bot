@@ -1,0 +1,36 @@
+ervices:
+  - type: web
+    name: nse-alert-bot
+    env: python
+    plan: starter
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn main:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: DRY_RUN
+        value: "false"
+      - key: ANGEL_API_KEY
+        sync: false
+      - key: ANGEL_CLIENT_CODE
+        sync: false
+      - key: ANGEL_PIN
+        sync: false
+      - key: ANGEL_TOTP_SECRET
+        sync: false
+      - key: BOT1_TELEGRAM_TOKEN
+        sync: false
+      - key: BOT1_CHAT_ID
+        sync: false
+      - key: BOT2_TELEGRAM_TOKEN
+        sync: false
+      - key: BOT2_CHAT_ID
+        sync: false
+      - key: BOT3_TELEGRAM_TOKEN
+        sync: false
+      - key: BOT3_CHAT_ID
+        sync: false
+    disk:
+      name: nse-alert-bot-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
