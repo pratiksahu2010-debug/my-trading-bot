@@ -18,10 +18,29 @@ BASE_DIR = Path(__file__).resolve().parent
 
 # ---------------------------------------------------------------------------
 # Load symbol universes (edit bots_config/symbols.json to add/remove symbols
-# without touching any code)
+# without touching any code). Falls back to a tiny bundled default set if
+# the file is somehow missing from the deploy (e.g. not committed to git),
+# so the app still boots and logs a loud warning instead of crashing.
 # ---------------------------------------------------------------------------
-with open(BASE_DIR / "bots_config" / "symbols.json") as f:
-    _SYMBOLS = json.load(f)
+_SYMBOLS_PATH = BASE_DIR / "bots_config" / "symbols.json"
+_FALLBACK_SYMBOLS = {
+    "BOT1": ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS"],
+    "BOT2": ["HDFCBANK.NS", "ICICIBANK.NS", "AXISBANK.NS", "TCS.NS", "INFY.NS"],
+    "BOT3": ["BEL.NS", "HAL.NS", "SAIL.NS", "ZOMATO.NS", "NYKAA.NS"],
+}
+
+try:
+    with open(_SYMBOLS_PATH) as f:
+        _SYMBOLS = json.load(f)
+    print(f"[config] Loaded symbols.json ({sum(len(v) for v in _SYMBOLS.values())} symbols total)")
+except (FileNotFoundError, json.JSONDecodeError) as e:
+    print(
+        f"[config] WARNING: could not load {_SYMBOLS_PATH} ({e}). "
+        f"Falling back to a small default symbol list (5 per bot) so the app "
+        f"can still boot. Fix: make sure bots_config/symbols.json is committed "
+        f"to your git repo and pushed to Render."
+    )
+    _SYMBOLS = _FALLBACK_SYMBOLS
 
 # ---------------------------------------------------------------------------
 # Strict rule thresholds — identical across all 3 bots, as specified
